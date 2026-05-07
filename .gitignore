@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.example
+*.log
+.DS_Store
+test-output-with-metadata.jpg
+.claude/
+example_001.jpg
+example_video.mp4
