@@ -5,3 +5,9 @@ dist/
 .DS_Store
 test-output-with-metadata.jpg
 .claude/settings.json
+examples/example_video.mp4
+examples/example_video.csv
+examples/example_video_001.jpg
+example_video_02.mp4
+example_video_02.csv
+example_video_02_001.jpg

@@ -47,23 +47,33 @@ Note: The `.env` file is excluded from git via `.gitignore` to keep your key sec
 
 ## Usage
 
-Run the analyzer with an optional video directory argument:
+Run the analyzer with optional arguments:
 
 ```bash
-python analyzer.py [VIDEO_DIR]
+python analyzer.py [VIDEO_DIR] [OPTIONS]
 ```
 
-- `VIDEO_DIR`: Folder containing videos to process (optional)
-- Default: current directory (`.`)
+**Positional arguments:**
+- `video_dir`: Folder containing videos to process (optional, default: current directory)
+
+**Options:**
+- `--output-dir`, `-o`: Output directory for CSV and thumbnail files (default: same as video_dir)
+- `--cleanup-thumbnails`, `-c`: Delete thumbnails after processing
+- `--extensions`, `-e`: Comma-separated list of video extensions (default: `.mp4,.mov`)
+- `--force`, `-f`: Reprocess videos even if CSV already exists (default: skip existing)
 
 Examples:
 
 ```bash
-python analyzer.py                          # Process videos in current folder
-python analyzer.py ./videos_to_process      # Process videos in specific folder
+python analyzer.py                                          # Process videos in current folder (skips existing CSVs)
+python analyzer.py ./videos_to_process                      # Process videos in specific folder
+python analyzer.py . --cleanup-thumbnails                   # Delete thumbnails after processing
+python analyzer.py . --output-dir ./output                  # Save output to different directory
+python analyzer.py . --extensions .mp4,.mov,.avi            # Process additional video formats
+python analyzer.py . --force                                # Re-analyze all videos (overwrite existing CSVs)
 ```
 
-After running, find the generated CSV files (one per video) in the specified folder.
+After running, find the generated CSV files (one per video) in the output folder.
 
 ## Expected Webhook Response
 

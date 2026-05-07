@@ -25,34 +25,83 @@ Hinweis: Der API Key wird aus der .env Datei geladen (siehe .env.example).
 
 import os
 import sys
+import argparse
 import ffmpeg
 import requests
 import csv
 import json
 
 # --- KONFIGURATION ---
-VIDEO_DIR = sys.argv[1] if len(sys.argv) > 1 else '.'
-WEBHOOK_URL = 'https://stock-photo-metadata-api-145532000117.us-central1.run.app/analyze'
+DEFAULT_WEBHOOK_URL = 'https://stock-photo-metadata-api-145532000117.us-central1.run.app/analyze'
+DEFAULT_EXTENSIONS = ('.mp4', '.mov')
 
-def load_api_key():
-    """Lädt den API Key aus der .env Datei."""
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description='Video Extract and Analyzer - Extrahiert Thumbnails und generiert KI-Metadaten'
+    )
+    parser.add_argument(
+        'video_dir',
+        nargs='?',
+        default='.',
+        help='Ordner mit den zu verarbeitenden Videos (default: aktuelles Verzeichnis)'
+    )
+    parser.add_argument(
+        '--output-dir', '-o',
+        default=None,
+        help='Ordner für Ausgabedateien (default: gleich wie video_dir)'
+    )
+    parser.add_argument(
+        '--cleanup-thumbnails', '-c',
+        action='store_true',
+        help='Löscht Thumbnails nach der Verarbeitung'
+    )
+    parser.add_argument(
+        '--extensions', '-e',
+        default='.mp4,.mov',
+        help='Kommagetrennte Liste der Video-Extensions (default: .mp4,.mov)'
+    )
+    parser.add_argument(
+        '--force', '-f',
+        action='store_true',
+        help='Bereits verarbeitete Videos (CSV existiert) erneut analysieren'
+    )
+    return parser.parse_args()
+
+
+def load_env():
+    """Lädt API_KEY und WEBHOOK_URL aus der .env Datei."""
     env_file = '.env'
+    api_key = None
+    webhook_url = None
     if not os.path.exists(env_file):
         print("Warnung: .env Datei nicht gefunden. Bitte .env.example kopieren und Key eintragen.")
-        return None
+        return api_key, webhook_url
     with open(env_file, 'r') as f:
         for line in f:
             line = line.strip()
             if line.startswith('API_KEY='):
-                return line.split('=', 1)[1]
-    return None
+                api_key = line.split('=', 1)[1]
+            elif line.startswith('WEBHOOK_URL='):
+                webhook_url = line.split('=', 1)[1]
+    if not api_key:
+        print("Warnung: API_KEY nicht in .env Datei gefunden.")
+    return api_key, webhook_url
 
 
-API_KEY = load_api_key()
+args = parse_args()
+API_KEY, WEBHOOK_URL = load_env()
+if not WEBHOOK_URL:
+    WEBHOOK_URL = DEFAULT_WEBHOOK_URL
 HEADERS = {
     'X-API-Key': API_KEY if API_KEY else '',
     'Accept': 'application/json'
 }
+VIDEO_DIR = args.video_dir
+OUTPUT_DIR = args.output_dir if args.output_dir else VIDEO_DIR
+VIDEO_EXTENSIONS = tuple(args.extensions.split(','))
+
 
 def extract_thumbnail(video_path, image_path):
     """Extrahiert ein Bild aus der Mitte des Videos."""
@@ -72,6 +121,7 @@ def extract_thumbnail(video_path, image_path):
         print(f"Fehler bei FFmpeg: {e.stderr.decode()}")
         return False
 
+
 def get_ai_metadata(image_path, video_filename):
     """Sendet das Bild an den Webhook und holt Metadaten."""
     with open(image_path, 'rb') as f:
@@ -82,25 +132,43 @@ def get_ai_metadata(image_path, video_filename):
             'useFilename': 'true'
         }
         response = requests.post(WEBHOOK_URL, headers=HEADERS, files=files, data=data)
-    
+
     if response.status_code == 200:
-        return response.json() # Erwartet {"title": "...", "description": "...", "keywords": "..."}
+        try:
+            metadata = response.json()
+        except json.JSONDecodeError:
+            print(f"Fehler: Ungültiges JSON von API: {response.text}")
+            return None
+        # Basic validation - check expected keys exist
+        required_keys = ['title', 'description', 'keywords']
+        if not all(key in metadata for key in required_keys):
+            print(f"Warnung: API-Antwort hat nicht alle erwarteten Keys. Erhalten: {list(metadata.keys())}")
+        return metadata
     else:
         print(f"KI-Fehler: {response.status_code} - {response.text}")
         return None
+
 
 def main():
     if not os.path.exists(VIDEO_DIR):
         print("Ordner nicht gefunden!")
         return
 
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+
     for filename in os.listdir(VIDEO_DIR):
-        if filename.lower().endswith(('.mp4', '.mov')):
+        if filename.lower().endswith(VIDEO_EXTENSIONS):
             base_name = os.path.splitext(filename)[0]
             video_path = os.path.join(VIDEO_DIR, filename)
             image_name = f"{base_name}_001.jpg"
-            image_path = os.path.join(VIDEO_DIR, image_name)
-            csv_path = os.path.join(VIDEO_DIR, f"{base_name}.csv")
+            image_path = os.path.join(OUTPUT_DIR, image_name)
+            csv_path = os.path.join(OUTPUT_DIR, f"{base_name}.csv")
+
+            # Skip if CSV already exists and --force not set
+            if os.path.exists(csv_path) and not args.force:
+                print(f"Überspringe (CSV existiert): {filename} (--force zum Überschreiben)")
+                continue
 
             print(f"Verarbeite: {filename}...")
 
@@ -108,7 +176,7 @@ def main():
             if extract_thumbnail(video_path, image_path):
                 # 2. KI-Abfrage
                 metadata = get_ai_metadata(image_path, filename)
-                
+
                 if metadata:
                     # 3. CSV Erstellung (Pro Video eine Datei)
                     with open(csv_path, mode='w', newline='', encoding='utf-8') as f:
@@ -117,15 +185,17 @@ def main():
                         writer.writerow(['Filename', 'Title', 'Description', 'Keywords'])
                         # Data
                         writer.writerow([
-                            filename, 
-                            metadata.get('title', ''), 
-                            metadata.get('description', ''), 
+                            filename,
+                            metadata.get('title', ''),
+                            metadata.get('description', ''),
                             metadata.get('keywords', '')
                         ])
                     print(f"Erfolg: {csv_path} erstellt.")
-                
-                # Optional: Lösche das JPG nach der Verarbeitung, um Platz zu sparen
-                # os.remove(image_path)
+
+                # Thumbnail löschen falls gewünscht
+                if args.cleanup_thumbnails and os.path.exists(image_path):
+                    os.remove(image_path)
+                    print(f"Thumbnail gelöscht: {image_path}")
 
 if __name__ == "__main__":
     main()
