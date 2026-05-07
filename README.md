@@ -4,7 +4,7 @@ Python tool that processes video files by extracting thumbnails and generating m
 
 ## How it works
 
-1. Scans a folder (`videos_to_process/`) for video files (`.mp4`, `.mov`)
+1. Scans a folder for video files (`.mp4`, `.mov`)
 2. Extracts a thumbnail from the middle of each video using ffmpeg
 3. Sends the thumbnail to a configured AI webhook for analysis
 4. Writes a CSV file per video with AI-generated metadata (title, description, keywords)
@@ -17,29 +17,33 @@ Install dependencies:
 pip install ffmpeg-python requests
 ```
 
-Ensure ffmpeg is installed on your system.
+Ensure ffmpeg is installed on your system (e.g., `brew install ffmpeg` on macOS).
 
 ## Configuration
 
-1. Copy the example env file and add your token:
+1. Copy the example env file and add your API key:
 
 ```bash
 cp .env.example .env
 ```
 
-2. Edit `.env` and add your Bearer token:
+2. Edit `.env` and add your API key:
 
 ```
-BEARER_TOKEN=your_actual_token_here
+API_KEY=your_actual_key_here
 ```
 
-3. (Optional) Edit the constants in `analyzer.py` if you need to change the webhook URL:
+**API Request format:** The script sends a multipart form request with:
+- `image`: The extracted thumbnail file
+- `filename`: Original video filename
+- `generateTwoPartKeywords`: Set to `"true"`
+- `useFilename`: Set to `"true"`
 
-```python
-WEBHOOK_URL = 'https://your-api.com/api/analyze'  # AI service endpoint
-```
+Authentication is done via the `X-API-Key` header.
 
-Note: The `.env` file is excluded from git via `.gitignore` to keep your token secure.
+3. (Optional) Edit the `WEBHOOK_URL` in `analyzer.py` (line 35) to change the AI service endpoint.
+
+Note: The `.env` file is excluded from git via `.gitignore` to keep your key secure.
 
 ## Usage
 

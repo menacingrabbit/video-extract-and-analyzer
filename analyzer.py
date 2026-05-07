@@ -20,7 +20,7 @@ Das Skript:
 3. Sendet das Bild an den konfigurierten KI-Webhook zur Analyse
 4. Schreibt eine CSV-Datei pro Video mit KI-generierten Metadaten (Titel, Beschreibung, Keywords)
 
-Hinweis: Das Bearer-Token wird aus der .env Datei geladen (siehe .env.example).
+Hinweis: Der API Key wird aus der .env Datei geladen (siehe .env.example).
 """
 
 import os
@@ -34,23 +34,24 @@ import json
 VIDEO_DIR = sys.argv[1] if len(sys.argv) > 1 else '.'
 WEBHOOK_URL = 'https://stock-photo-metadata-api-145532000117.us-central1.run.app/analyze'
 
-def load_bearer_token():
-    """Lädt das Bearer Token aus der .env Datei."""
+def load_api_key():
+    """Lädt den API Key aus der .env Datei."""
     env_file = '.env'
     if not os.path.exists(env_file):
-        print("Warnung: .env Datei nicht gefunden. Bitte .env.example kopieren und Token eintragen.")
+        print("Warnung: .env Datei nicht gefunden. Bitte .env.example kopieren und Key eintragen.")
         return None
     with open(env_file, 'r') as f:
         for line in f:
             line = line.strip()
-            if line.startswith('BEARER_TOKEN='):
+            if line.startswith('API_KEY='):
                 return line.split('=', 1)[1]
     return None
 
-BEARER_TOKEN = load_bearer_token()
-AUTH_HEADER = {
-    'Authorization': f'Bearer {BEARER_TOKEN}' if BEARER_TOKEN else 'Bearer ',
-    'Content-Type': 'application/json'
+
+API_KEY = load_api_key()
+HEADERS = {
+    'X-API-Key': API_KEY if API_KEY else '',
+    'Accept': 'application/json'
 }
 
 def extract_thumbnail(video_path, image_path):
@@ -71,15 +72,16 @@ def extract_thumbnail(video_path, image_path):
         print(f"Fehler bei FFmpeg: {e.stderr.decode()}")
         return False
 
-def get_ai_metadata(image_path):
+def get_ai_metadata(image_path, video_filename):
     """Sendet das Bild an den Webhook und holt Metadaten."""
-    # Je nachdem, ob dein Dienst Base64 oder File-Upload erwartet. 
-    # Hier als Beispiel ein einfacher Upload:
     with open(image_path, 'rb') as f:
-        # Falls dein Webhook JSON mit Base64 will, müsstest du das hier umbauen.
-        # Beispiel für Multipart-Form-Data:
-        files = {'file': f}
-        response = requests.post(WEBHOOK_URL, headers=AUTH_HEADER, files=files)
+        files = {'image': f}
+        data = {
+            'filename': video_filename,
+            'generateTwoPartKeywords': 'true',
+            'useFilename': 'true'
+        }
+        response = requests.post(WEBHOOK_URL, headers=HEADERS, files=files, data=data)
     
     if response.status_code == 200:
         return response.json() # Erwartet {"title": "...", "description": "...", "keywords": "..."}
@@ -105,7 +107,7 @@ def main():
             # 1. Extraktion
             if extract_thumbnail(video_path, image_path):
                 # 2. KI-Abfrage
-                metadata = get_ai_metadata(image_path)
+                metadata = get_ai_metadata(image_path, filename)
                 
                 if metadata:
                     # 3. CSV Erstellung (Pro Video eine Datei)
