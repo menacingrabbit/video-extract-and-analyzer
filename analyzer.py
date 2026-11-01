@@ -1,26 +1,26 @@
 """
 Video Extract and Analyzer
 
-Verarbeitet Video-Dateien durch Extraktion von Thumbnails und KI-basierte Metadaten-Generierung.
+Processes video files by extracting thumbnails and generating AI-based metadata.
 
-Verwendung:
+Usage:
     python analyzer.py [VIDEO_DIR]
 
-Argumente:
-    VIDEO_DIR    Ordner mit den zu verarbeitenden Videos (optional)
-                 Default: aktuelles Verzeichnis (.)
+Arguments:
+    VIDEO_DIR    Folder containing the videos to process (optional)
+                 Default: current directory (.)
 
-Beispiele:
-    python analyzer.py                          # Verarbeitet Videos im aktuellen Ordner
-    python analyzer.py ./videos_to_process      # Verarbeitet Videos in einem spezifischen Ordner
+Examples:
+    python analyzer.py                          # Process videos in the current folder
+    python analyzer.py ./videos_to_process      # Process videos in a specific folder
 
-Das Skript:
-1. Sucht nach Video-Dateien (.mp4, .mov) im angegebenen Ordner
-2. Extrahiert ein Thumbnail aus der Mitte jedes Videos mit ffmpeg
-3. Sendet das Bild an den konfigurierten KI-Webhook zur Analyse
-4. Schreibt eine CSV-Datei pro Video mit KI-generierten Metadaten (Titel, Beschreibung, Keywords)
+The script:
+1. Searches for video files (.mp4, .mov) in the given folder
+2. Extracts a thumbnail from the middle of each video using ffmpeg
+3. Sends the image to the configured AI webhook for analysis
+4. Writes one CSV file per video with AI-generated metadata (title, description, keywords)
 
-Hinweis: Der API Key wird aus der .env Datei geladen (siehe .env.example).
+Note: The API key is loaded from the .env file (see .env.example).
 """
 
 import os
@@ -31,7 +31,7 @@ import requests
 import csv
 import json
 
-# --- KONFIGURATION ---
+# --- CONFIGURATION ---
 DEFAULT_WEBHOOK_URL = 'https://stock-photo-metadata-api-145532000117.us-central1.run.app/analyze'
 DEFAULT_EXTENSIONS = ('.mp4', '.mov')
 
@@ -39,44 +39,44 @@ DEFAULT_EXTENSIONS = ('.mp4', '.mov')
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description='Video Extract and Analyzer - Extrahiert Thumbnails und generiert KI-Metadaten'
+        description='Video Extract and Analyzer - Extracts thumbnails and generates AI metadata'
     )
     parser.add_argument(
         'video_dir',
         nargs='?',
         default='.',
-        help='Ordner mit den zu verarbeitenden Videos (default: aktuelles Verzeichnis)'
+        help='Folder containing the videos to process (default: current directory)'
     )
     parser.add_argument(
         '--output-dir', '-o',
         default=None,
-        help='Ordner für Ausgabedateien (default: gleich wie video_dir)'
+        help='Output directory for generated files (default: same as video_dir)'
     )
     parser.add_argument(
         '--cleanup-thumbnails', '-c',
         action='store_true',
-        help='Löscht Thumbnails nach der Verarbeitung'
+        help='Delete thumbnails after processing'
     )
     parser.add_argument(
         '--extensions', '-e',
         default='.mp4,.mov',
-        help='Kommagetrennte Liste der Video-Extensions (default: .mp4,.mov)'
+        help='Comma-separated list of video extensions (default: .mp4,.mov)'
     )
     parser.add_argument(
         '--force', '-f',
         action='store_true',
-        help='Bereits verarbeitete Videos (CSV existiert) erneut analysieren'
+        help='Re-analyze already processed videos (CSV exists)'
     )
     return parser.parse_args()
 
 
 def load_env():
-    """Lädt API_KEY und WEBHOOK_URL aus der .env Datei."""
+    """Load API_KEY and WEBHOOK_URL from the .env file."""
     env_file = '.env'
     api_key = None
     webhook_url = None
     if not os.path.exists(env_file):
-        print("Warnung: .env Datei nicht gefunden. Bitte .env.example kopieren und Key eintragen.")
+        print("Warning: .env file not found. Please copy .env.example and add your key.")
         return api_key, webhook_url
     with open(env_file, 'r') as f:
         for line in f:
@@ -86,7 +86,7 @@ def load_env():
             elif line.startswith('WEBHOOK_URL='):
                 webhook_url = line.split('=', 1)[1]
     if not api_key:
-        print("Warnung: API_KEY nicht in .env Datei gefunden.")
+        print("Warning: API_KEY not found in .env file.")
     return api_key, webhook_url
 
 
@@ -104,11 +104,11 @@ VIDEO_EXTENSIONS = tuple(args.extensions.split(','))
 
 
 def extract_thumbnail(video_path, image_path):
-    """Extrahiert ein Bild aus der Mitte des Videos."""
+    """Extract a frame from the middle of the video."""
     try:
         probe = ffmpeg.probe(video_path)
         duration = float(probe['format']['duration'])
-        # Extrahiere Frame bei 50% der Laufzeit
+        # Extract frame at 50% of the runtime
         (
             ffmpeg
             .input(video_path, ss=duration/2)
@@ -118,12 +118,12 @@ def extract_thumbnail(video_path, image_path):
         )
         return True
     except ffmpeg.Error as e:
-        print(f"Fehler bei FFmpeg: {e.stderr.decode()}")
+        print(f"FFmpeg error: {e.stderr.decode()}")
         return False
 
 
 def get_ai_metadata(image_path, video_filename):
-    """Sendet das Bild an den Webhook und holt Metadaten."""
+    """Send the image to the webhook and retrieve metadata."""
     with open(image_path, 'rb') as f:
         files = {'image': f}
         data = {
@@ -137,21 +137,21 @@ def get_ai_metadata(image_path, video_filename):
         try:
             metadata = response.json()
         except json.JSONDecodeError:
-            print(f"Fehler: Ungültiges JSON von API: {response.text}")
+            print(f"Error: Invalid JSON from API: {response.text}")
             return None
         # Basic validation - check expected keys exist
         required_keys = ['title', 'description', 'keywords']
         if not all(key in metadata for key in required_keys):
-            print(f"Warnung: API-Antwort hat nicht alle erwarteten Keys. Erhalten: {list(metadata.keys())}")
+            print(f"Warning: API response is missing expected keys. Received: {list(metadata.keys())}")
         return metadata
     else:
-        print(f"KI-Fehler: {response.status_code} - {response.text}")
+        print(f"AI error: {response.status_code} - {response.text}")
         return None
 
 
 def main():
     if not os.path.exists(VIDEO_DIR):
-        print("Ordner nicht gefunden!")
+        print("Folder not found!")
         return
 
     if not os.path.exists(OUTPUT_DIR):
@@ -167,18 +167,18 @@ def main():
 
             # Skip if CSV already exists and --force not set
             if os.path.exists(csv_path) and not args.force:
-                print(f"Überspringe (CSV existiert): {filename} (--force zum Überschreiben)")
+                print(f"Skipping (CSV exists): {filename} (use --force to overwrite)")
                 continue
 
-            print(f"Verarbeite: {filename}...")
+            print(f"Processing: {filename}...")
 
-            # 1. Extraktion
+            # 1. Extraction
             if extract_thumbnail(video_path, image_path):
-                # 2. KI-Abfrage
+                # 2. AI request
                 metadata = get_ai_metadata(image_path, filename)
 
                 if metadata:
-                    # 3. CSV Erstellung (Pro Video eine Datei)
+                    # 3. CSV creation (one file per video)
                     with open(csv_path, mode='w', newline='', encoding='utf-8') as f:
                         writer = csv.writer(f)
                         # Header
@@ -190,12 +190,12 @@ def main():
                             metadata.get('description', ''),
                             metadata.get('keywords', '')
                         ])
-                    print(f"Erfolg: {csv_path} erstellt.")
+                    print(f"Success: created {csv_path}.")
 
-                # Thumbnail löschen falls gewünscht
+                # Delete thumbnail if requested
                 if args.cleanup_thumbnails and os.path.exists(image_path):
                     os.remove(image_path)
-                    print(f"Thumbnail gelöscht: {image_path}")
+                    print(f"Thumbnail deleted: {image_path}")
 
 if __name__ == "__main__":
     main()

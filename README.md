@@ -4,20 +4,27 @@ Python tool that processes video files by extracting thumbnails and generating m
 
 ## How it works
 
-1. Scans a folder for video files (`.mp4`, `.mov`)
+1. Scans the top level of a folder for video files (`.mp4`, `.mov` by default)
 2. Extracts a thumbnail from the middle of each video using ffmpeg
 3. Sends the thumbnail to a configured AI webhook for analysis
 4. Writes a CSV file per video with AI-generated metadata (title, description, keywords)
 
+## Prerequisites
+
+- Python 3
+- `ffmpeg` available in your `PATH` (e.g., `brew install ffmpeg` on macOS)
+
 ## Setup
 
-Install dependencies:
+Create a virtual environment and install the dependencies from `requirements.txt`:
 
 ```bash
-pip install ffmpeg-python requests
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
-Ensure ffmpeg is installed on your system (e.g., `brew install ffmpeg` on macOS).
+`ffmpeg` is a system dependency and is not installed by pip, so it must be installed separately (see Prerequisites).
 
 ## Configuration
 
@@ -41,7 +48,13 @@ API_KEY=your_actual_key_here
 
 Authentication is done via the `X-API-Key` header.
 
-3. (Optional) Edit the `WEBHOOK_URL` in `analyzer.py` (line 35) to change the AI service endpoint.
+3. (Optional) Change the AI service endpoint by setting `WEBHOOK_URL` in `.env`:
+
+```
+WEBHOOK_URL=https://your-endpoint.example.com/analyze
+```
+
+If `WEBHOOK_URL` is not set, the default hardcoded in `analyzer.py` is used.
 
 Note: The `.env` file is excluded from git via `.gitignore` to keep your key secure.
 
@@ -73,7 +86,26 @@ python analyzer.py . --extensions .mp4,.mov,.avi            # Process additional
 python analyzer.py . --force                                # Re-analyze all videos (overwrite existing CSVs)
 ```
 
-After running, find the generated CSV files (one per video) in the output folder.
+## Output
+
+For each processed video, two files are written to the output directory:
+
+- `<basename>.csv` — one row with the columns `Filename, Title, Description, Keywords`
+- `<basename>_001.jpg` — the extracted thumbnail (removed after processing when `--cleanup-thumbnails` is set)
+
+The output directory defaults to the input directory; use `--output-dir` to change it.
+
+## Merging Results
+
+Combine the per-video CSVs from a batch into a single file:
+
+```bash
+python merge_csvs.py *.csv
+```
+
+- The output is named after the first input file with `-merged` appended (e.g. `video1-merged.csv`) and is written next to it. Use `--output-dir`, `-o` to write it elsewhere.
+- The header row is taken from the first file; the headers of the remaining files are skipped.
+- If you re-run the merge with a shell glob after an earlier merge, the existing `*-merged.csv` is picked up again and its rows are duplicated.
 
 ## Expected Webhook Response
 
